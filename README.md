@@ -74,7 +74,7 @@ pip install -r requirements.txt
 Run the Streamlit application:
 
 ```bash
-streamlit run hospital.py
+streamlit run hospitall.py
 ```
 
 The application will open automatically in your browser.
