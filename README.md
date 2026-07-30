@@ -1,6 +1,6 @@
 # 🏥 Hospital Analytics Dashboard
 
-An interactive Hospital Analytics Dashboard built using **Python, Streamlit, SQLite, Pandas, and Plotly**. This project helps hospitals monitor patient records, doctor performance, appointments, medicine inventory, and revenue through interactive visualizations.
+An interactive Hospital Analytics Dashboard built using **Python, Streamlit, mysql, Pandas, and Plotly**. This project helps hospitals monitor patient records, doctor performance, appointments, medicine inventory, and revenue through interactive visualizations.
 
 ---
 
