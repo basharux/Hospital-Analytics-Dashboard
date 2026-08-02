@@ -43,7 +43,8 @@ This project demonstrates skills in **Python, SQL, Data Analysis, Data Visualiza
 
 # 📊 Dashboard Preview
 
-![Hospital Dashboard](C.png)
+![Hospital Dashboard](A.png)
+![Hospital Dashboard](c.png)
 
 ---
 
