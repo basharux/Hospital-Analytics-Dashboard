@@ -1,7 +1,2 @@
 streamlit
 pandas
-plotly
-numpy
-openpyxl
-pymysql
-mysql-connector-python
