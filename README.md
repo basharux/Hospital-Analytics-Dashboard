@@ -1,16 +1,26 @@
 # 🏥 Hospital Analytics Dashboard
 
-An interactive Hospital Management and Analytics Dashboard built with **Python, Streamlit, MySQL, Pandas and Plotly**. It helps hospitals and clinics manage patients, doctors, appointments, billing and medicine inventory, and gives administrators a live analytics dashboard of key business metrics.
+An interactive Hospital Management and Analytics Dashboard built with **Python, Streamlit, MySQL / TiDB, Pandas and Plotly**. It helps hospitals and clinics manage patients, doctors, appointments, billing and medicine inventory, and gives administrators a live analytics dashboard of key business metrics.
+
+## 🔗 Live Demo
+
+**👉 https://hospital-analytics-dashboard-01.streamlit.app/**
+
+> The app runs on free hosting, so it may take a minute to wake up on the first visit.
+> The demo contains **fake data only**. Please do not enter real patient information.
+> Demo login (Receptionist / Doctor): ask the author for the credentials.
 
 ---
 
 ## 📊 Dashboard Preview
 
-![Login Screen](login.png)
-![Dashboard Preview 1](A.png)
-![Dashboard Preview 2](C.png)
+| Dashboard | Pending Bills |
+| --- | --- |
+| ![Dashboard](screenshots/dashboard.png) | ![Pending Bills](screenshots/pending_bills.png) |
 
-
+| Billing (PDF Bill) | Medicine Alerts |
+| --- | --- |
+| ![Billing](screenshots/billing.png) | ![Medicine Alerts](screenshots/medicine.png) |
 
 ---
 
@@ -18,12 +28,16 @@ An interactive Hospital Management and Analytics Dashboard built with **Python, 
 
 - 🔐 **Secure login** with role-based access (Admin / Doctor / Receptionist)
 - 🔑 **User management** page for Admin (add and remove staff accounts)
-- 📊 Executive dashboard with live KPIs and filters (gender, ward, disease)
+- 📊 Executive dashboard with live KPIs, filters (gender, ward, disease) and alerts
+- 🔍 **Search** for patients and records
 - 🧑 Patient management (add, view, delete with confirmation, CSV export)
 - 👨‍⚕️ Doctor management
 - 📅 Appointment booking and tracking
 - 💰 Billing and revenue analysis (paid / pending / partial)
+- 🧾 **PDF bill generation and download**
+- ⏳ **Pending Bills** page to track unpaid and partially paid bills
 - 💊 Medicine inventory management
+- ⏰ **Medicine alerts** for low stock and expiry
 - 🦠 Disease, ward occupancy, age group and gender analytics
 - 📥 CSV download on every data table
 
@@ -47,10 +61,12 @@ Passwords are stored as salted PBKDF2 hashes, never as plain text. On first run 
 | --- | --- |
 | Python | Application logic |
 | Streamlit | Web interface |
-| MySQL | Database |
+| MySQL (local) / TiDB Cloud (live demo) | Database |
 | PyMySQL | Database connection |
 | Pandas | Data processing |
 | Plotly | Interactive charts |
+| fpdf2 | PDF bill generation |
+| Streamlit Community Cloud | Hosting |
 
 ---
 
@@ -111,20 +127,23 @@ Hospital-Analytics-Dashboard/
 ├── auth.py             # Login, roles and user management
 ├── requirements.txt    # Python dependencies
 ├── .gitignore          # Keeps secrets out of GitHub
-├── A.png, C.png        # Dashboard screenshots
+├── screenshots/        # README screenshots
 └── README.md
 ```
 
 ---
 
+## 🔒 Security Note
+
+This is a demo / learning project. Before using it with real patient data, use a separate database, regular backups and proper privacy controls.
+
+---
+
 ## 📈 Future Improvements
 
-- 📄 PDF bill and report generation
-- ⏰ Medicine expiry and low-stock alerts
-- 📧 Email notifications
+- 📧 Email / SMS notifications for pending bills
 - 🧾 Prescription and patient history
 - 💾 Automatic database backups
-- ☁️ Cloud deployment
 - 📱 Mobile responsive design
 
 ---
