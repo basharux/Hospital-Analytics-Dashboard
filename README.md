@@ -20,7 +20,7 @@ An interactive Hospital Management and Analytics Dashboard built with **Python, 
 
  | Medicine Alerts |  Pending Bills |
 | --- | --- |
- ![Medicine Alerts](medicine.png) | ![Pending Bills](screenshots/pending_bills.png) |
+ ![Medicine Alerts](medicine.png) | ![Pending Bills](pending_bills.png) |
 
 ---
 
