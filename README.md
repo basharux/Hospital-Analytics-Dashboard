@@ -8,6 +8,8 @@ An interactive Hospital Management and Analytics Dashboard built with **Python, 
 
 ![Dashboard Preview 1](A.png)
 ![Dashboard Preview 2](C.png)
+![Uploading image.png…]()
+
 
 ---
 
