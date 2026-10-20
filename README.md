@@ -18,9 +18,9 @@ An interactive Hospital Management and Analytics Dashboard built with **Python, 
 | --- | --- |
 | ![ Admin login ](login.png) |  ![ Dashboard ](dashboard.png) | 
 
- | Medicine Alerts |  Pending Bills |
+ | Medicine Alerts |  ward & Age chats]|
 | --- | --- |
- ![Medicine Alerts](medicine.png) | ![Pendings Bills](pendigsbills.png) |
+ ![Medicine Alerts](medicine.png) | ![ward & Age chats](wards.png) |
 
 ---
 
