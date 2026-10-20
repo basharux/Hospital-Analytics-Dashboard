@@ -36,6 +36,84 @@ def style_chart(fig, title=None, height=400):
     fig.update_yaxes(gridcolor="rgba(255,255,255,0.08)", zeroline=False)
     return fig
 
+# ---------------- SETTINGS (change these as you like) ----------------
+HOSPITAL_NAME = "CityHospital"   # printed at the top of every PDF bill
+LOW_STOCK_LIMIT = 50             # medicines below this quantity are "low stock"
+EXPIRY_ALERT_DAYS = 30           # medicines expiring within this many days are flagged
+
+
+# ---------------- PDF BILL ----------------
+def make_bill_pdf(bill):
+    """Build a one-page PDF receipt for a bill and return it as bytes."""
+    from fpdf import FPDF
+    from datetime import date
+
+    def clean(value):
+        # the built-in PDF fonts only support basic Latin characters
+        text = "-" if value is None else str(value)
+        return text.encode("latin-1", "replace").decode("latin-1")
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=False)
+
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 12, clean(HOSPITAL_NAME), new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, "Patient Bill / Receipt", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(2)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(6)
+
+    def line_item(label, value):
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(55, 8, clean(label))
+        pdf.set_font("Helvetica", "", 11)
+        pdf.cell(0, 8, clean(value), new_x="LMARGIN", new_y="NEXT")
+
+    line_item("Bill No:", f"#{bill['bill_id']}")
+    line_item("Printed on:", date.today().strftime("%d %b %Y"))
+    pdf.ln(3)
+    line_item("Patient Name:", bill["name"])
+    line_item("Patient ID:", bill["patient_id"])
+    line_item("Age / Gender:", f"{bill['age']} / {bill['gender']}")
+    line_item("Phone:", bill["phone"])
+    line_item("Disease:", bill["disease"])
+    line_item("Ward / Room:", f"{bill['ward_type']} / {bill['room_no']}")
+    pdf.ln(4)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(6)
+
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(55, 10, "Total Amount:")
+    pdf.cell(0, 10, f"Rs. {float(bill['amount']):,.2f}", new_x="LMARGIN", new_y="NEXT")
+    line_item("Payment Status:", bill["payment_status"])
+
+    pdf.ln(18)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, "This is a computer generated receipt.", align="C")
+    return bytes(pdf.output())
+
+
+# ---------------- MEDICINE ALERT COUNTS ----------------
+def medicine_alert_counts(cur):
+    """Return (expired, expiring_soon, low_stock) medicine counts."""
+    cur.execute("SELECT COUNT(*) FROM medicines WHERE expiry_date < CURDATE()")
+    expired = cur.fetchone()[0]
+    cur.execute(
+        """
+        SELECT COUNT(*) FROM medicines
+        WHERE expiry_date >= CURDATE()
+          AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
+        """,
+        (EXPIRY_ALERT_DAYS,),
+    )
+    expiring = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM medicines WHERE quantity < %s", (LOW_STOCK_LIMIT,))
+    low = cur.fetchone()[0]
+    return expired, expiring, low
+
+
 # ---------------- DATABASE CONNECTION ----------------
 # Credentials come ONLY from .streamlit/secrets.toml or environment variables.
 def get_connection():
@@ -95,6 +173,7 @@ menu = [
     "Book Appointment",
     "View Appointments",
     "Billing",
+    "Pending Bills",
     "Medicine"
 ]
 
@@ -257,7 +336,19 @@ if choice == "Executive Dashboard":
 - 💵 **Total Revenue:** ₹ {total_revenue:,.0f}
 - 📅 **Appointments:** {total_appointments:,}
 - 💊 **Medicine Inventory:** {total_medicines:,}
+- ⏳ **Pending Payments:** ₹ {pending_amount:,.0f}
 """)
+
+    # ---------------- MEDICINE ALERTS ----------------
+    expired_n, expiring_n, low_n = medicine_alert_counts(cursor)
+    if expired_n or expiring_n or low_n:
+        st.subheader("🚨 Medicine Alerts")
+        if expired_n:
+            st.error(f"⛔ {expired_n} medicine(s) have already EXPIRED. Open Medicine Inventory to see them.")
+        if expiring_n:
+            st.warning(f"⚠️ {expiring_n} medicine(s) will expire within {EXPIRY_ALERT_DAYS} days.")
+        if low_n:
+            st.warning(f"📉 {low_n} medicine(s) are low on stock (below {LOW_STOCK_LIMIT}).")
 
     st.divider()
 
@@ -643,14 +734,47 @@ elif choice == "View Patients":
 
     st.title("👥 Patients List")
 
-    patient_df = pd.read_sql(
-        """
-        SELECT patient_id, name, age, gender, disease, room_no, ward_type, admit_status
-        FROM patients
-        """,
-        conn
+    # ---------------- SEARCH + FILTERS ----------------
+    search = st.text_input(
+        "🔍 Search patient",
+        placeholder="Type name, patient ID, disease or phone number"
     )
 
+    f1, f2 = st.columns(2)
+    with f1:
+        ward_filter = st.selectbox("Ward", ["All", "General", "Private", "ICU", "Emergency"])
+    with f2:
+        status_filter = st.selectbox("Status", ["All", "Admitted", "Discharged"])
+
+    patient_query = """
+        SELECT patient_id, name, age, gender, phone, disease, room_no, ward_type, admit_status
+        FROM patients
+        WHERE 1=1
+    """
+    patient_params = []
+
+    if search.strip():
+        like = f"%{search.strip()}%"
+        patient_query += """
+            AND (name LIKE %s OR disease LIKE %s OR phone LIKE %s
+                 OR CAST(patient_id AS CHAR) = %s)
+        """
+        patient_params += [like, like, like, search.strip()]
+
+    if ward_filter != "All":
+        patient_query += " AND ward_type=%s"
+        patient_params.append(ward_filter)
+
+    if status_filter != "All":
+        patient_query += " AND admit_status=%s"
+        patient_params.append(status_filter)
+
+    patient_query += " ORDER BY patient_id DESC"
+    patient_df = pd.read_sql(patient_query, conn, params=patient_params)
+
+    st.caption(f"Showing {len(patient_df):,} patient(s)")
+    if patient_df.empty:
+        st.info("No patients found. Try a different search or filter.")
     st.dataframe(patient_df, use_container_width=True)
 
     csv = patient_df.to_csv(index=False).encode("utf-8")
@@ -714,11 +838,43 @@ elif choice == "View Doctors":
 
     st.title("👨‍⚕️ Doctors List")
 
-    doctor_df = pd.read_sql(
-        "SELECT doctor_id, name, specialization, fees, room_no FROM doctors",
-        conn
+    # ---------------- SEARCH + FILTER ----------------
+    doctor_search = st.text_input(
+        "🔍 Search doctor",
+        placeholder="Type doctor name, ID or specialization"
     )
 
+    spec_list = pd.read_sql(
+        "SELECT DISTINCT specialization FROM doctors ORDER BY specialization",
+        conn
+    )["specialization"].dropna().tolist()
+    spec_filter = st.selectbox("Specialization", ["All"] + spec_list)
+
+    doctor_query = """
+        SELECT doctor_id, name, specialization, fees, room_no
+        FROM doctors
+        WHERE 1=1
+    """
+    doctor_params = []
+
+    if doctor_search.strip():
+        like = f"%{doctor_search.strip()}%"
+        doctor_query += """
+            AND (name LIKE %s OR specialization LIKE %s
+                 OR CAST(doctor_id AS CHAR) = %s)
+        """
+        doctor_params += [like, like, doctor_search.strip()]
+
+    if spec_filter != "All":
+        doctor_query += " AND specialization=%s"
+        doctor_params.append(spec_filter)
+
+    doctor_query += " ORDER BY name"
+    doctor_df = pd.read_sql(doctor_query, conn, params=doctor_params)
+
+    st.caption(f"Showing {len(doctor_df):,} doctor(s)")
+    if doctor_df.empty:
+        st.info("No doctors found. Try a different search or filter.")
     st.dataframe(doctor_df, use_container_width=True)
 
     csv = doctor_df.to_csv(index=False).encode("utf-8")
@@ -787,8 +943,19 @@ elif choice == "View Appointments":
 
     st.title("📅 Appointment List")
 
-    appointment_df = pd.read_sql(
-        """
+    # ---------------- SEARCH + FILTER ----------------
+    appt_search = st.text_input(
+        "🔍 Search appointment",
+        placeholder="Type patient name, doctor name, specialization or appointment ID"
+    )
+
+    status_list = pd.read_sql(
+        "SELECT DISTINCT status FROM appointments ORDER BY status",
+        conn
+    )["status"].dropna().tolist()
+    appt_status = st.selectbox("Status", ["All"] + status_list)
+
+    appt_query = """
         SELECT
             a.appointment_id,
             p.name AS patient,
@@ -799,10 +966,28 @@ elif choice == "View Appointments":
         FROM appointments a
         LEFT JOIN patients p ON a.patient_id = p.patient_id
         LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
-        """,
-        conn
-    )
+        WHERE 1=1
+    """
+    appt_params = []
 
+    if appt_search.strip():
+        like = f"%{appt_search.strip()}%"
+        appt_query += """
+            AND (p.name LIKE %s OR d.name LIKE %s OR d.specialization LIKE %s
+                 OR CAST(a.appointment_id AS CHAR) = %s)
+        """
+        appt_params += [like, like, like, appt_search.strip()]
+
+    if appt_status != "All":
+        appt_query += " AND a.status=%s"
+        appt_params.append(appt_status)
+
+    appt_query += " ORDER BY a.date DESC"
+    appointment_df = pd.read_sql(appt_query, conn, params=appt_params)
+
+    st.caption(f"Showing {len(appointment_df):,} appointment(s)")
+    if appointment_df.empty:
+        st.info("No appointments found. Try a different search or filter.")
     st.dataframe(appointment_df, use_container_width=True)
 
     appointment_csv = appointment_df.to_csv(index=False).encode("utf-8")
@@ -853,15 +1038,38 @@ elif choice == "Billing":
 
     st.subheader("🧾 Billing Records")
 
-    billing_df = pd.read_sql(
-        """
+    bill_search = st.text_input(
+        "🔍 Search bill",
+        placeholder="Type patient name, phone or bill ID"
+    )
+    bill_status = st.selectbox("Payment Status filter", ["All", "Paid", "Pending", "Partial"])
+
+    bill_query = """
         SELECT b.bill_id, p.name, b.amount, b.payment_status
         FROM billing b
         JOIN patients p ON b.patient_id = p.patient_id
-        """,
-        conn
-    )
+        WHERE 1=1
+    """
+    bill_params = []
 
+    if bill_search.strip():
+        like = f"%{bill_search.strip()}%"
+        bill_query += """
+            AND (p.name LIKE %s OR p.phone LIKE %s
+                 OR CAST(b.bill_id AS CHAR) = %s)
+        """
+        bill_params += [like, like, bill_search.strip()]
+
+    if bill_status != "All":
+        bill_query += " AND b.payment_status=%s"
+        bill_params.append(bill_status)
+
+    bill_query += " ORDER BY b.bill_id DESC"
+    billing_df = pd.read_sql(bill_query, conn, params=bill_params)
+
+    st.caption(f"Showing {len(billing_df):,} bill(s)")
+    if billing_df.empty:
+        st.info("No bills found. Try a different search or filter.")
     st.dataframe(billing_df, use_container_width=True)
 
     csv = billing_df.to_csv(index=False).encode("utf-8")
@@ -872,12 +1080,90 @@ elif choice == "Billing":
         mime="text/csv"
     )
 
+    # ---------------- PDF BILL ----------------
+    if not billing_df.empty:
+        st.markdown("---")
+        st.subheader("🖨 Download Bill (PDF)")
+        st.caption("Use the search box above to find the bill, then select it here.")
+
+        bill_labels = {
+            row["bill_id"]: f"Bill #{row['bill_id']} | {row['name']} | ₹{float(row['amount']):,.0f} | {row['payment_status']}"
+            for _, row in billing_df.iterrows()
+        }
+        selected_bill = st.selectbox(
+            "Select bill",
+            list(bill_labels.keys()),
+            format_func=lambda x: bill_labels[x]
+        )
+
+        bill_detail = pd.read_sql(
+            """
+            SELECT b.bill_id, b.patient_id, b.amount, b.payment_status,
+                   p.name, p.age, p.gender, p.phone, p.disease, p.ward_type, p.room_no
+            FROM billing b
+            JOIN patients p ON b.patient_id = p.patient_id
+            WHERE b.bill_id=%s
+            """,
+            conn,
+            params=[int(selected_bill)]
+        )
+
+        if not bill_detail.empty:
+            try:
+                pdf_bytes = make_bill_pdf(bill_detail.iloc[0])
+                st.download_button(
+                    label="📄 Download Bill PDF",
+                    data=pdf_bytes,
+                    file_name=f"bill_{int(selected_bill)}.pdf",
+                    mime="application/pdf"
+                )
+            except ImportError:
+                st.error("PDF library missing. Run: pip install fpdf2")
+
 # ================================================================
 # ---------------- MEDICINE ----------------
 # ================================================================
 elif choice == "Medicine":
 
     st.title("💊 Medicine Inventory")
+
+    # ---------------- ALERTS ----------------
+    expired_n, expiring_n, low_n = medicine_alert_counts(cursor)
+    if expired_n or expiring_n or low_n:
+        st.subheader("🚨 Alerts")
+        tab_expired, tab_expiring, tab_low = st.tabs([
+            f"⛔ Expired ({expired_n})",
+            f"⚠️ Expiring in {EXPIRY_ALERT_DAYS} days ({expiring_n})",
+            f"📉 Low stock ({low_n})",
+        ])
+        base_sql = "SELECT medicine_name, quantity, price, expiry_date, supplier FROM medicines"
+        with tab_expired:
+            st.dataframe(
+                pd.read_sql(base_sql + " WHERE expiry_date < CURDATE() ORDER BY expiry_date", conn),
+                use_container_width=True
+            )
+        with tab_expiring:
+            st.dataframe(
+                pd.read_sql(
+                    base_sql + """ WHERE expiry_date >= CURDATE()
+                    AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
+                    ORDER BY expiry_date""",
+                    conn, params=[EXPIRY_ALERT_DAYS]
+                ),
+                use_container_width=True
+            )
+        with tab_low:
+            st.dataframe(
+                pd.read_sql(
+                    base_sql + " WHERE quantity < %s ORDER BY quantity",
+                    conn, params=[LOW_STOCK_LIMIT]
+                ),
+                use_container_width=True
+            )
+    else:
+        st.success("✅ No medicine alerts. Stock and expiry dates look fine.")
+
+    st.markdown("---")
 
     medicine_name = st.text_input("Medicine Name")
     quantity = st.number_input("Quantity", min_value=1)
@@ -900,7 +1186,23 @@ elif choice == "Medicine":
 
     st.subheader("📦 Medicine Stock")
 
-    medicine_df = pd.read_sql("SELECT * FROM medicines", conn)
+    med_search = st.text_input(
+        "🔍 Search medicine",
+        placeholder="Type medicine name or supplier"
+    )
+
+    if med_search.strip():
+        like = f"%{med_search.strip()}%"
+        medicine_df = pd.read_sql(
+            "SELECT * FROM medicines WHERE medicine_name LIKE %s OR supplier LIKE %s",
+            conn, params=[like, like]
+        )
+    else:
+        medicine_df = pd.read_sql("SELECT * FROM medicines", conn)
+
+    st.caption(f"Showing {len(medicine_df):,} medicine(s)")
+    if medicine_df.empty:
+        st.info("No medicines found.")
     st.dataframe(medicine_df, use_container_width=True)
 
     csv = medicine_df.to_csv(index=False).encode("utf-8")
@@ -914,6 +1216,87 @@ elif choice == "Medicine":
 # ================================================================
 # ---------------- MANAGE USERS (Admin only) ----------------
 # ================================================================
+elif choice == "Pending Bills":
+
+    st.title("⏳ Pending Bills")
+
+    flash = st.session_state.pop("pending_msg", None)
+    if flash:
+        st.success(flash)
+
+    pending_search = st.text_input(
+        "🔍 Search pending bill",
+        placeholder="Type patient name, phone or bill ID"
+    )
+
+    pending_query = """
+        SELECT b.bill_id, p.patient_id, p.name AS patient, p.phone,
+               b.amount, b.payment_status
+        FROM billing b
+        JOIN patients p ON b.patient_id = p.patient_id
+        WHERE b.payment_status IN ('Pending', 'Partial')
+    """
+    pending_params = []
+
+    if pending_search.strip():
+        like = f"%{pending_search.strip()}%"
+        pending_query += """
+            AND (p.name LIKE %s OR p.phone LIKE %s
+                 OR CAST(b.bill_id AS CHAR) = %s)
+        """
+        pending_params += [like, like, pending_search.strip()]
+
+    pending_query += " ORDER BY b.amount DESC"
+    pending_df = pd.read_sql(pending_query, conn, params=pending_params)
+
+    total_pending = float(pending_df["amount"].astype(float).sum()) if not pending_df.empty else 0.0
+
+    m1, m2 = st.columns(2)
+    m1.metric("⏳ Unpaid Bills", f"{len(pending_df):,}")
+    m2.metric("💰 Amount Outstanding", f"₹ {total_pending:,.0f}")
+    st.caption("Partial bills are included. Only the full bill amount is stored, so that is what is shown for them.")
+
+    if pending_df.empty:
+        st.success("🎉 No pending bills.")
+    else:
+        st.dataframe(pending_df, use_container_width=True)
+
+        csv = pending_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Download Pending Bills CSV",
+            data=csv,
+            file_name="pending_bills.csv",
+            mime="text/csv"
+        )
+
+        st.markdown("---")
+        st.subheader("✅ Mark a Bill as Paid")
+
+        pending_labels = {
+            row["bill_id"]: f"Bill #{row['bill_id']} | {row['patient']} | ₹{float(row['amount']):,.0f} | {row['payment_status']}"
+            for _, row in pending_df.iterrows()
+        }
+        paid_bill = st.selectbox(
+            "Select bill",
+            list(pending_labels.keys()),
+            format_func=lambda x: pending_labels[x]
+        )
+        confirm_paid = st.checkbox("Yes, this bill has been fully paid")
+
+        if st.button("Mark as Paid"):
+            if not confirm_paid:
+                st.warning("Please tick the confirmation box first.")
+            else:
+                try:
+                    cursor.execute(
+                        "UPDATE billing SET payment_status='Paid' WHERE bill_id=%s",
+                        (int(paid_bill),)
+                    )
+                    st.session_state["pending_msg"] = f"Bill #{int(paid_bill)} marked as Paid."
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to update bill: {e}")
+
 elif choice == "Manage Users":
     manage_users(conn, user)
 

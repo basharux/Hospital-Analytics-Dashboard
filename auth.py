@@ -23,6 +23,7 @@ ROLE_MENU = {
         "Book Appointment",
         "View Appointments",
         "Billing",
+        "Pending Bills",
         "Medicine",
     ],
 }
