@@ -14,9 +14,9 @@ An interactive Hospital Management and Analytics Dashboard built with **Python, 
 
 ## 📊 Dashboard Preview
 
-| Dashboard | 
+| Admin login | Dashboard |
 | --- | --- |
-| ![Dashboard](screenshots/dashboard.png) |
+| ![ Admin login ](login.png) |  ![ Dashboard ](dashboard.png) | 
 
  | Medicine Alerts |  Pending Bills |
 | --- | --- |
