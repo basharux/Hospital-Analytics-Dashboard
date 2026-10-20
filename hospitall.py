@@ -39,11 +39,11 @@ def style_chart(fig, title=None, height=400):
 # ---------------- DATABASE CONNECTION ----------------
 # Credentials come ONLY from .streamlit/secrets.toml or environment variables.
 def get_connection():
-    def cfg(key):
+    def cfg(key, default=None):
         try:
             return st.secrets[key]
         except Exception:
-            return os.getenv(key)
+            return os.getenv(key, default)
 
     keys = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"]
     values = {k: cfg(k) for k in keys}
@@ -51,12 +51,24 @@ def get_connection():
     if missing:
         raise RuntimeError(f"Missing settings: {', '.join(missing)}")
 
+    # SSL is only switched on when DB_SSL = "true" (needed for TiDB Cloud)
+    extra = {}
+    if str(cfg("DB_SSL", "false")).lower() == "true":
+        import certifi
+        extra = dict(
+            ssl={"ca": certifi.where()},
+            ssl_verify_cert=True,
+            ssl_verify_identity=True,
+        )
+
     return pymysql.connect(
         host=values["DB_HOST"],
+        port=int(cfg("DB_PORT", 3306)),
         user=values["DB_USER"],
         password=values["DB_PASSWORD"],
         database=values["DB_NAME"],
-        autocommit=True
+        autocommit=True,
+        **extra
     )
 
 

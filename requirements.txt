@@ -2,3 +2,4 @@ streamlit==1.52.1
 pandas==2.3.3
 plotly==6.8.0
 PyMySQL==1.2.0
+certifi
