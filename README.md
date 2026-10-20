@@ -14,13 +14,13 @@ An interactive Hospital Management and Analytics Dashboard built with **Python, 
 
 ## 📊 Dashboard Preview
 
-| Dashboard | Pending Bills |
+| Dashboard | 
 | --- | --- |
-| ![Dashboard](screenshots/dashboard.png) | ![Pending Bills](screenshots/pending_bills.png) |
+| ![Dashboard](screenshots/dashboard.png) |
 
-| Billing (PDF Bill) | Medicine Alerts |
+ | Medicine Alerts |  Pending Bills |
 | --- | --- |
- ![Medicine Alerts](screenshots/medicine.png) |
+ ![Medicine Alerts](screenshots/medicine.png) | ![Pending Bills](screenshots/pending_bills.png) |
 
 ---
 
