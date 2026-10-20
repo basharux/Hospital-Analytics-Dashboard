@@ -20,7 +20,7 @@ An interactive Hospital Management and Analytics Dashboard built with **Python, 
 
 | Billing (PDF Bill) | Medicine Alerts |
 | --- | --- |
-| ![Billing](screenshots/billing.png) | ![Medicine Alerts](screenshots/medicine.png) |
+ ![Medicine Alerts](screenshots/medicine.png) |
 
 ---
 
