@@ -102,7 +102,7 @@ Create a file `.streamlit/secrets.toml` (this file is git-ignored and is never u
 ```toml
 DB_HOST = "localhost"
 DB_USER = "root"
-DB_PASSWORD = "your_mysql_password"
+DB_PASSWORD = ""
 DB_NAME = "hospital_db"
 ```
 
